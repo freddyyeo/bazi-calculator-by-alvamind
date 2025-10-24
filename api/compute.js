@@ -1,45 +1,59 @@
-// /api/compute.js  ← root/api/compute.js
-// Node.js Serverless Function
+// api/compute.js
+const { Solar } = require('lunar-javascript');
 
-export default async function handler(req, res) {
+const STEM_ELEM = { 甲:'木', 乙:'木', 丙:'火', 丁:'火', 戊:'土', 己:'土', 庚:'金', 辛:'金', 壬:'水', 癸:'水' };
+const ELEM_ORDER = ['木','火','土','金','水'];
+
+module.exports = async (req, res) => {
   try {
-    if (req.method !== "POST") {
-      res.status(405).json({ error: "method_not_allowed" });
-      return;
-    }
+    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+    const { name='Guest', dob, time='12:00', tz='+08:00', gender='male' } = body;
+    if (!dob) return res.status(400).json({ error: 'bad_request', detail: 'dob is required (YYYY-MM-DD)' });
 
-    const body = typeof req.body === "object" ? req.body
-               : JSON.parse(req.body || "{}");
+    const [Y,M,D] = dob.split('-').map(Number);
+    const [h,m]  = time.split(':').map(Number);
 
-    const { dob, time, tz, gender } = body || {};
-    if (!dob || !time || !tz) {
-      res.status(400).json({ error: "bad_request", detail: "dob/time/tz required" });
-      return;
-    }
+    const solar = Solar.fromYmdHms(Y, M, D, h, m || 0, 0);
+    const lunar = solar.getLunar();
+    const ec    = lunar.getEightChar();
 
-    // TODO: replace with real results from the open-source BaZi library.
-    const result = {
+    const yearGZ  = ec.getYear();
+    const monthGZ = ec.getMonth();
+    const dayGZ   = ec.getDay();
+    const timeGZ  = ec.getTime();
+
+    const dayMaster = dayGZ[0];
+
+    // very simple stem-based element tally
+    const stems = [yearGZ[0], monthGZ[0], dayGZ[0], timeGZ[0]];
+    const count = { 木:0, 火:0, 土:0, 金:0, 水:0 };
+    stems.forEach(s => { const e = STEM_ELEM[s]; if (e) count[e]++; });
+    const total = stems.length || 1;
+    const pct = Object.fromEntries(ELEM_ORDER.map(e => [e, Math.round((count[e]/total)*100)]));
+
+    const yun = ec.getYun(gender.toLowerCase() === 'male');
+    const startYear = yun.getStartYear();
+    const decades = yun.getDaYun().map((dy, i) => ({
+      idx: i+1,
+      gz: dy.getGanZhi ? dy.getGanZhi() : (dy.getGz ? dy.getGz() : ''),
+      startYear: dy.getStartYear ? dy.getStartYear() : (startYear + i*10),
+    }));
+
+    res.json({
+      ok: true,
+      name,
+      input: { dob, time, tz, gender },
       pillars: {
-        year:  { gan: "戊", zhi: "午", gz: "戊午" },
-        month: { gan: "丁", zhi: "巳", gz: "丁巳" },
-        day:   { gan: "甲", zhi: "戌", gz: "甲戌" },
-        hour:  { gan: "己", zhi: "巳", gz: "己巳" }
+        year:  { gz: yearGZ },
+        month: { gz: monthGZ },
+        day:   { gz: dayGZ },
+        time:  { gz: timeGZ }
       },
-      dayMaster: "甲",
-      elementTally: {
-        count: { 木: 2, 火: 1, 土: 1, 金: 0, 水: 0 },
-        pct:   { 木: 50, 火: 25, 土: 25, 金: 0, 水: 0 }
-      },
-      tenGods: { year: "正官", month: "伤官", day: "日主", hour: "偏财" },
-      decades: [
-        { index: 1, startYear: 1986, startAge: 8,  gz: "丙寅" },
-        { index: 2, startYear: 1996, startAge: 18, gz: "丁卯" },
-        { index: 3, startYear: 2006, startAge: 28, gz: "戊辰" }
-      ]
-    };
-
-    res.status(200).json({ ok: true, ...result });
+      dayMaster,
+      elementTally: { count, pct },
+      yun: { startYear, decades }
+    });
   } catch (e) {
-    res.status(500).json({ error: "bazi_core_failed", detail: e?.message || String(e) });
+    res.status(500).json({ error: 'compute_failed', detail: String(e && e.message || e) });
   }
-}
+};
