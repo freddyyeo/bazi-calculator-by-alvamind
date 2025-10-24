@@ -1,9 +1,5 @@
 {
   "version": 2,
-  "functions": {
-    "api/**.js": { "runtime": "nodejs18.x" }
-  },
-  "routes": [
-    { "src": "/api/compute", "dest": "/api/compute.js" }
-  ]
+  "builds": [{ "src": "api/compute.js", "use": "@vercel/node" }],
+  "routes": [{ "src": "/api/compute", "dest": "/api/compute.js" }]
 }
