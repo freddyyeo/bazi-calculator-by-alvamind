@@ -1,45 +1,45 @@
-// api/compute.js  (in the *forked bazi repo*)
-// runtime must be nodejs for this library
-export const config = { runtime: "nodejs" };
+// /api/compute.js  ← root/api/compute.js
+// Node.js Serverless Function
 
-import { NextResponse } from "next/server";
-
-// TODO: replace these imports with the actual API from the repo.
-// Most BaZi libs expose methods to compute GanZhi pillars & luck cycles.
-// If the project exports a class/function, import and call it here.
-import { computeBaZiChart } from "../lib/adapter.js"; 
-// ^ Create this adapter file if the repo doesn’t export a direct function.
-// The adapter should take (dob, time, tz, gender) and return:
-// { pillars:{year,month,day,hour}, dayMaster, elementTally, tenGods, decades }
-
-export default async function handler(req) {
+export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
-      return NextResponse.json({ error: "method_not_allowed" }, { status: 405 });
+      res.status(405).json({ error: "method_not_allowed" });
+      return;
     }
-    const body = await req.json();
+
+    const body = typeof req.body === "object" ? req.body
+               : JSON.parse(req.body || "{}");
+
     const { dob, time, tz, gender } = body || {};
-
-    // Validate
     if (!dob || !time || !tz) {
-      return NextResponse.json(
-        { error: "bad_request", detail: "dob/time/tz required" },
-        { status: 400 }
-      );
+      res.status(400).json({ error: "bad_request", detail: "dob/time/tz required" });
+      return;
     }
 
-    // Do the actual BaZi compute USING THE REPO YOU FORKED:
-    const result = await computeBaZiChart({ dob, time, tz, gender });
+    // TODO: replace with real results from the open-source BaZi library.
+    const result = {
+      pillars: {
+        year:  { gan: "戊", zhi: "午", gz: "戊午" },
+        month: { gan: "丁", zhi: "巳", gz: "丁巳" },
+        day:   { gan: "甲", zhi: "戌", gz: "甲戌" },
+        hour:  { gan: "己", zhi: "巳", gz: "己巳" }
+      },
+      dayMaster: "甲",
+      elementTally: {
+        count: { 木: 2, 火: 1, 土: 1, 金: 0, 水: 0 },
+        pct:   { 木: 50, 火: 25, 土: 25, 金: 0, 水: 0 }
+      },
+      tenGods: { year: "正官", month: "伤官", day: "日主", hour: "偏财" },
+      decades: [
+        { index: 1, startYear: 1986, startAge: 8,  gz: "丙寅" },
+        { index: 2, startYear: 1996, startAge: 18, gz: "丁卯" },
+        { index: 3, startYear: 2006, startAge: 28, gz: "戊辰" }
+      ]
+    };
 
-    // Always return a stable shape
-    return NextResponse.json({
-      ok: true,
-      ...result, // { pillars, dayMaster, elementTally, tenGods, decades }
-    });
+    res.status(200).json({ ok: true, ...result });
   } catch (e) {
-    return NextResponse.json(
-      { error: "bazi_core_failed", detail: e?.message || String(e) },
-      { status: 500 }
-    );
+    res.status(500).json({ error: "bazi_core_failed", detail: e?.message || String(e) });
   }
 }
